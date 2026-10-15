@@ -2,7 +2,7 @@
 // @name         realtime_liushui
 // @name:zh-CN   B站直播 · 本场流水看板
 // @namespace    realtime-liushui
-// @version      2.8.24
+// @version      2.8.25
 // @copyright    2026, local（MIT：随便用、随便改，出事不负责）
 // @description  仅用于 bilibili 直播间（live.bilibili.com）：实时统计本场流水 —— 付费礼物 / 超级留言(SC) / 大航海，并读取官方高能榜贡献值，含贡献榜、事件流、支持「抽成后流水」与 CSV 导出
 // @author       local
@@ -12,16 +12,16 @@
 // @grant        none
 // @noframes
 // ---------------------------------------------------------------------------
-// 发布托管后启用下面两行（指向脚本地址），Tampermonkey 会据此自动检查更新；
+// 下面两行指向本脚本的托管地址，Tampermonkey 据此自动检查更新；
 // 地址需为 https 且以 .user.js 结尾。
-// // @updateURL    https://example.com/bili-live-liushui.user.js
-// // @downloadURL  https://example.com/bili-live-liushui.user.js
+// @updateURL    https://raw.githubusercontent.com/hefafafa/realtime_liushui/main/realtime_liushui.user.js
+// @downloadURL  https://raw.githubusercontent.com/hefafafa/realtime_liushui/main/realtime_liushui.user.js
 // 每次改动都要递增 @version，否则 Tampermonkey 不认为有更新。
 // 主页 / 支持地址（可选）：
-// // @homepageURL  https://example.com/
-// // @supportURL   https://example.com/issues
+// @homepageURL  https://github.com/hefafafa/realtime_liushui
+// @supportURL   https://github.com/hefafafa/realtime_liushui/issues
 // 在 GreasyFork 发布时声明作者受益项（打赏属于此类）：
-// // @antifeature  donation
+// @antifeature  donation
 // ==/UserScript==
 
 /*
@@ -54,7 +54,7 @@
   var GUARD_NAME = { 1: '总督', 2: '提督', 3: '舰长' };
   var GUARD_DEFAULT_PRICE = { 1: 19998000, 2: 1998000, 3: 138000 };  // 电池
 
-  var SCRIPT_VERSION = '2.8.24';                     // 与头部 @version 一致；自检窗首行显示，方便用户报版本
+  var SCRIPT_VERSION = '2.8.25';                     // 与头部 @version 一致；自检窗首行显示，方便用户报版本
 
   // ---------------- 作者联系 / 打赏入口 ----------------
   // 留空即完全不显示：不产生死链，也不弹窗打扰。与头部 @supportURL / @homepageURL 保持一致。
@@ -69,7 +69,7 @@
   var DONATE_QR_ALIPAY = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAFoAQAAAABSnlx4AAAFAUlEQVR42u2bXW7jRhCEvxYJjIAEoG5A3YTekyQnCencJDfIDZY+Qm4wvgH9EIDCjqbyMKR+bMqWFvuwsYYvkqz2YNRq1lRVt0zccK3I0Tk6R/+E0TszM7Pt8/b5YfrroxmYVsjKQ8Dm3bXNbtmJ9P/M4MKnRBqdJPla8k3fSJKUPqNJoZDGQpKGSloB66t2sc4Ve6l2xmqEyte+ltTT9tAKEYkmKRRjMUI1TvlmPPv/fnHVMSPEh9G1n5+1HRgrWWRfZow9RYhrog8lqLfvn7x63j6bPTRfpA5rEQbYrsz5vnQXA1DyGmQfBHRagtiEJxN++7o/AXAiinbE7wOeZIQ4L3mxS6msn5qn5q/28euXrybToywW++Kb27l/U0A1vFp7O3+XXUaI5dNu8QScL19LPY26tqNN9RpNgeIYcmHtbmkfGb8vMA5J0kAtT9PTSB3tBBIWLTEON7qMEN8fXZ4hMlBN9T1VOCCZoiVIDriLiPxw+d7J5+VyfQ9UA1D7WuqbjrZDoEi0SBEogpMGp1zfJ1c40yRDNVDJU3uaHtqu1YzJClBIwR00IAAbAH+Kya9WzxrwHQ2oIWW77hv1QKuZjkgKgMuc7UeegANU8rV8ox5mlqxoqcCL8QpEPpKO8pqd6G7yvXqLyIfzr5/hREKKYApFKIJLvlOu72NVnSNyosg0vpbU0SYOIRRSBjWSeMbp2j5pkpMSXGWEuAohBqgHqHpo1NPoxOUtQhGKkDDikO8B2GxfIQRABAjlLTsp7zDf1ZBKXH2jvp1UyqiIxUPcB5qk5BbffnUTItsnYxzJv4BU3jBlPLnOgQQn12vAMuPJIn6vp2inoRqoPbXnqdWBHBfRosxpZ7+MToMbbvVP7sNTSpokIbLUQ9tNnE0kylboKLRPEXnSiw/LKRxzxV6OPm/tPR69thUqgf362Nlzgxuglgea/ij//jiegG50GvIJeFkDJsWdEtiomxCZiEWKkFx79xFHvqlzzefpXN/Wn58Zx1D72tMkl2g+AU0KUIy4Menuz1eDuik63hQdLjM8Kl97avWNuukQTBkPRQDcOaO+c19ztZzB4bcBsKZPEvBcazBNChyiJ9Gofk73UcMAuOwpXY7+tgVe7HcAnh/4pzsD2NNZgRXEgUoDPdD0Hv5uu2lqJmJxkosj1zC8eK8u6GQTJd9e6tpOnabONRPDe1eTdNkFvTIns6eUWFsjqWu75I1GkuYuxkL3jsj8gD7gqeae5o5S31XqEsFLpEMKuPGNh5fz/SqDMIuMVj3pXEsFG9yrDFaST6qk6enp2/lusACk4As7ecj5nvqAtSQPjaZOqohE0iwRN3dS1zft5D4mGd/OblHPfSkQcTI5kge6gBDbXLHfNSlwmDzyzSGyndtSUCTIyZMCH87bb563J2/8eXy6Xy/Mf1e+PnjO0B4pbwg4Xe8S3XF9+wXfZwWU5UGAH/HEU0s9bUfbKU0VzJN1I+4j/NZd4/eL2Qbqnid7AFqTJUfJ9layN1svrL3NFfsdLv/pLHjtnxLHe0SAVvtibxHYVSO8bIbrfM3cl3rHoHsb/WgmwwziSiv25d7WO1u/VEPO4Htznpvp9ZNNtT1Vt35Nj7sNc8U66QS7W3XQxjR6G74FnEY3umv7UuFTI8Syyz++nbc/c/lLCGezt0A9Eb2OVl36NUS0aJospesnj8r7QgjLv4vO0Tn6p4v+D9kv29p3qkY3AAAAAElFTkSuQmCC';
   var DONATE_QR_WECHAT = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAWgAAAFoAQAAAABSnlx4AAAG2klEQVR42u2bv4/kSBXHP6/tG1va4dogJEYIyR0SwYUrcZK9/8HF6IQ2Iz0hghXSqmtOJ3Q5CRFswB9w/wHViICAYC4jQfIsi9gLALduV3If1X4EZffOTNs91bezaCVcwfQPfVVTfq/qfb/vvWpRjhgzJvSEntBvGxrVpnu31ApInP9WbV4BUSv9OZ+rXpnbDs7WTvY+Al3dOp1qE6mqqikskKhqi6qqVrk2iapq9/G6dyZ7f320ighQ2HnNRmJpRQyrolqnG4kBzkUWO3S/4xeZf5XpNLwWuh1Hx1fer0qyJHGxgI9P8yaN3GTBtwY9X6f+zbmUlwuShu1ssuAdM3fPDaoVSRN5cjDkWpM45DZukMned4w2A7qqsHk1bxIXtShLU1R5nTSRG9FV/0cWbI5Cp7ehe3ooIVungCAY4DLbpNv4BpNEvflXzOvM874CefXDL+Yv32nRaX/fZaxSF7UAS5trnaiqKlBolfcHRQ1FlWtAlrEb9WTvcXTbn4beB/u4iqzzjjrPFpa8Tjpf7WJV5yxy1SnLuCvmbtH+NDSRtrD0OR6Ji1RZms7gI6fBXFPMZjoNd4sWFdUH5aVkm7nz5PCghLkPVipqYZ1NFjwKXR5AP94FKNcogsECTX1tq185O2ogr/BM0o9/qOtKWVNF5O7Q2xhE1BSrxfy6ZttIotqGzP1kIOeYBcjow2gLsA19yg8AXCj60U5hhKC/GhW0Q+ilAS6C64NPANsA2RCTOFGFXX3w1R9tItexezWaZbhBYTDmne1YgWbYl+U/3w9GG/767T8Fex6eQXTU/j4NRSeHTkPy8p0WWaolV613m/XDHXOriEhRdXPHs1fbOQVK/y3wPGAlKd8LKhP7cVH++IgzX9pHI8dhCF1LDc0iEL2YVcDvQr3ziQUXupIvU2BrxrIMQNUsrRer+jT3bK5aJV0GUuxxw05XvXtVKN9evV0cFWN1LLQN2rs8au72GHRlxnKrr80kZR/+rOsjV3aT9bt6lY9HeZ2o6nkDpssrfBhbqh2tiJjmmKecjQmOIbSOu3M2knhmg+QwEgcH49pw/dsAnx4RY42cDDJP38tQEQOXeQ0S+2c8hXWKzmApptDqesZo+1jlgKfgdg9q+j0zsBJnJEuDLTgzMSdp+FP+5wdbbGgcbPn7jx6Z4LmFzzjPwtAxT7dn5eBWGfbOx803/lAPMPcMkk0sKiwflOR1twnrBZTgZZYPGHk9Fn3K+FufXGZhKznjdLb9pQ2MPrybz35VfBxowZhTPnoRzDv6L7BpqHfSM9TMQquJteGrkeirVwkmV9V/u2eFF0baJA5RNSx9HtFnGagpbF7NVVVdPVdD5NGiqj14JMtYx/DdcH2yNTwMQ9euBsQ0Qegs8sSWBq7km8B7Q7Jg0PNqz7CzOPQpF8+jA/XBvrXd1Qe/rLMuu2uQtruTcMXe17sX6en3z15lGbet5DezvyzMB+Mr0Wsr0Z/yt0MrubERP+Qn4ZHt+R+z3wKyCEJnrq4MG56FsdTjrIRmP0MaYZKHGC7AeIC5jlZRzsuVSNYx/KcxWLC+dnhugMuxikj5WfqLMlT7sH2f8wtlP0wMofWFgZ8zkA0MoeXzDOIWTpuQlfysi/Tv/flAL3qXDZdU4E5f2tgFzP3YAcxOtgN97s09p8CSZSdG5eI+OOTXDraxeCFbMcINJ174NA+fB3oeY64m6QfRtvR5oyHAJtwv2Z4OJemDc5/Ai4/i9kUgc1sSA/Xefx5cCYkCujhC9c6G+k6q6hB/Jye/Vn4C5g3iOxueNw4r6ixcf5t90XEA/XBf+x5ciZhj0CdH5A2RvX87eisiIqzKuLBBuwowUp0NemyT6FZE9EHJZbaWxCcWLIDt3OkMVUOxWtzaY3RHZUfPj0I/OQa9l+3Gh1x5TN91e0TftdxnnVf1QVR+by8X6zRxPukoV0VfgRJRS15NFdb/BXr//mBXEqHLMvpbIX70fe751Nl7TXTW27v1vezdeezsfaNY0HNDR+W2qx/2/qgne/MmbiH0w+ZaQ9R9KPyrE/UH5WCf20725g30Aa/emNIq331aqgW6G1NqigO9jMneR6KjTrauFqyzXSuvsMy/mG9iUFiVN5jb3NQQi32NPNn7ddExnbBSIF/lzeaeExVgVeafp/irzxT2cjGfLPiG0EON0WpAf6/TZiN96GKdrO8hLZwbmex9dzemHKCm8GU51wsnrYCudGiKQW5Ih9OicrL3Hd7UjXz9YyUi32lARTsNnDRsIxWAXOvJ3neD9hUTwwLYpP3+XpXQ33U+L/dvqOVVXkPkpIWlpep/76e336adVG/gkOl30RN6Qr916P8C42bdT76ZUnUAAAAASUVORK5CYII=';
   var DONATE_NOTE = '扫码后请核对收款人昵称（显示为「合法(**璠)」）';
-  var OFFICIAL_URL = '';                              // 官方发布地址：填上后打赏浮层会提示「只从官方地址下载」
+  var OFFICIAL_URL = 'https://github.com/hefafafa/realtime_liushui';                              // 官方发布地址：填上后打赏浮层会提示「只从官方地址下载」
 
   var HINT_KEY = 'dsh_bili_liushui_hintdone';   // 「首次使用提示」只看一次，永不再现
   var hintDone = false;
