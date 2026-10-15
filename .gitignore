@@ -1,0 +1,10 @@
+# 本仓库只发布脚本本身与文档；开发/抓包过程文件不入库
+.dsh-live-watch/
+.venv/
+share/qr-*.png
+share/*.zip
+*.log
+*.bak
+*.bak-*
+__pycache__/
+node_modules/
