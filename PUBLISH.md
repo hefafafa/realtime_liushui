@@ -87,12 +87,15 @@ var OFFICIAL_URL = 'https://github.com/<用户名>/realtime_liushui';
 
 ```bash
 node --check realtime_liushui.user.js          # 语法
-for t in test-*.js; do node "$t"; done          # 9 个回归测试（含打赏入口、收款码、面板布局）
+for t in test-*.js; do node "$t"; done          # 10 个回归测试（含打赏入口、收款码、面板布局）
 node .dsh-live-watch/make-share.mjs             # 校验 @version 与 SCRIPT_VERSION 一致并生成分享副本
 node .dsh-live-watch/scan-comments.js           # 注释里不应残留版本号/实测痕迹/自用笔记
 ```
 
 - [ ] `@version` 与 `SCRIPT_VERSION` 一致且比上一版大
+- [ ] 篡改猴「已安装脚本」里**只剩一份**本脚本（重复安装时，`buildUI()` 的
+      `if (document.getElementById('dsh-liushui-root')) return;` 会让先注入的旧版本占住面板，
+      表现为"面板第一行一直是旧版本号"；详见 README「更新」）
 - [ ] `README.md` 写明"仅 B站直播间可用"和使用方法
 - [ ] 打赏收款码已内嵌（`DONATE_QR_ALIPAY` / `DONATE_QR_WECHAT` 非空），并在浮层里提示核对收款人昵称
 - [ ] 反馈入口有效（QQ 2513493134 / 邮箱 2513493134@qq.com）
