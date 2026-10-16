@@ -2,7 +2,7 @@
 // @name         realtime_liushui
 // @name:zh-CN   B站直播 · 本场流水看板
 // @namespace    realtime-liushui
-// @version      2.8.25
+// @version      2.8.26
 // @copyright    2026, local（MIT：随便用、随便改，出事不负责）
 // @description  仅用于 bilibili 直播间（live.bilibili.com）：实时统计本场流水 —— 付费礼物 / 超级留言(SC) / 大航海，并读取官方高能榜贡献值，含贡献榜、事件流、支持「抽成后流水」与 CSV 导出
 // @author       local
@@ -54,7 +54,7 @@
   var GUARD_NAME = { 1: '总督', 2: '提督', 3: '舰长' };
   var GUARD_DEFAULT_PRICE = { 1: 19998000, 2: 1998000, 3: 138000 };  // 电池
 
-  var SCRIPT_VERSION = '2.8.25';                     // 与头部 @version 一致；自检窗首行显示，方便用户报版本
+  var SCRIPT_VERSION = '2.8.26';                     // 与头部 @version 一致；自检窗首行显示，方便用户报版本
 
   // ---------------- 作者联系 / 打赏入口 ----------------
   // 留空即完全不显示：不产生死链，也不弹窗打扰。与头部 @supportURL / @homepageURL 保持一致。
@@ -619,6 +619,42 @@
     list.push({ k: k, at: now });
     while (list.length > 300) list.shift();
   }
+  // 同一条报文被**同一条通道**重复投递（页面钩子把同一份 JSON 解两遍、包重放、断线补发）时，
+  // 配对去重救不了它 —— 它只认「另一条通道的那份」，配不上就当「自有通道漏了」补记一笔，
+  // 于是同一份报文在流水里留下两条：一条正常、一条「（金额未识别）」。这就是截图上的重复。
+  // 下面的登记表补上这一层：**记过就不再记**，且登记项不会被消费掉
+  // （crossTake 是取走就删，所以只够挡两份，第三份就又漏进来了）。
+  // 60 秒的登记窗口只是兜底防内存膨胀：连击批次的 batch_combo_id 里带批次起始时间戳，
+  // 换一批就换一个 id，所以同一个人前后真送的两件礼物指纹天然不同，不会被误合。
+  var SAME_MSG_MS = 60000;
+  var giftSeenKeys = [];      // 自有通道已记过的报文指纹
+  var pageGiftSeenKeys = [];  // 页面通道已记过的报文指纹
+  var guardSeenIds = [];      // 上舰报文 id（同一笔上舰的重复投递）
+  function msgFingerprint(cmd, toks) {
+    var t = [], i;
+    for (i = 0; i < toks.length; i++) {
+      var v = toks[i];
+      t.push(v === undefined || v === null ? '' : String(v));
+    }
+    return cmd + '|' + t.join('|');
+  }
+  // 登记表通用判断：命中了就说明「这份报文这条通道记过」，返回 true
+  function seenOnce(list, key, now) {
+    var i;
+    while (list.length && now - list[0].at > SAME_MSG_MS) list.shift();
+    for (i = 0; i < list.length; i++) {
+      if (list[i].k === key) return true;
+    }
+    list.push({ k: key, at: now });
+    while (list.length > 1200) list.shift();
+    return false;
+  }
+  function giftSeenOnce(fromOwn, key) {
+    return seenOnce(fromOwn ? giftSeenKeys : pageGiftSeenKeys, key, Date.now());
+  }
+  function guardSeen(key) {
+    return seenOnce(guardSeenIds, key, Date.now());
+  }
   // 返回 true = 这条与另一条通道已记过的重复，应当丢弃
   function crossDuplicate(fromOwn, o) {
     if (!ownWsReady) return false;                 // 自有通道没就绪时，页面通道就是唯一来源，全收
@@ -806,6 +842,26 @@
     var add;
     // 批次累计实付（proto: combo_total_coin）——有它就用它，比 price×个数 更准（含折扣）
     var cumCoin = Number(pick(giftField(d, ['combo_total_coin', 'comboTotalCoin']), 0)) || 0;
+    // ---- 报文级去重：同一条通道里的**同一份报文**只记一次 ----
+    // 配对去重（上面的 crossDuplicate）只挡「另一条通道的那一份」；页面钩子对同一份报文
+    // 解两遍、包重放、断线补发时，第二份在配对里找不到对手，就会走到下面 add<=0 的分支，
+    // 留下一条「（金额未识别）」的幻影行 —— 这就是截图上那种成对出现的重复行。
+    // 指纹：「解码成结构化批次」的用 **批次 id + 批次累计**；批次累计不可信（cum=0）时
+    // 退回身份指纹 —— 否则同一批次里「累计 1 个」和「累计 2 个」两条报文会算出同一个
+    // 指纹，第二条真消息会被当成重复吞掉，连击就少钱。
+    // 身份指纹要带上「累计个数」：连击续报就是靠它区分「第 1 个」和「第 2 个」的。
+    var msgId = pick(giftField(d, ['id']), '');
+    var msgTs = pick(giftField(d, ['timestamp', 'time', 'ts']), '');
+    var v2raw = (d._v2 && d._v2raw) ? d._v2raw : null;
+    var rawPb = (v2raw && v2raw.rawPb) || '';
+    // 只有报文**带身份标记**时才做这一层去重：批次 id、消息 id、时间戳、pb 原文。
+    // 什么标记都没有的报文（老式匿名礼物）分不清「重复投递」和「同一个人又送了一个」，
+    // 宁可不合也不吞真钱 —— 那正是这层去重最忌讳的事。
+    if (batchId || cumCoin || msgId || msgTs || rawPb) {
+      var dedupKey = (batchId && cumCoin) ? ('b|' + batchId + '|' + cumCoin)
+        : msgFingerprint(cmd, [gname, num, price, comboNum, uname, msgId, msgTs, rawPb]);
+      if (giftSeenOnce(fromOwn, dedupKey)) return;
+    }
     // 量级 / 整除护栏：该字段偶尔会出现房间级大数（与 f7 同源，不可全信）。
     // 真正的批次累计一定是「单价的整数倍」（cum = 单价 × 累计个数），
     // 而 1725515 / 927248 这种除以单价不是整数的，一律不认。
@@ -986,6 +1042,16 @@
       uid: d.uid, uname: d.username, name: 'GUARD_BUY_L' + lv, num: num,
       price: hasPrice ? Number(d.price) : (GUARD_DEFAULT_PRICE[lv] || 0), batchId: '', cum: 0
     })) return;
+    // 报文级去重：同一笔上舰被同一条通道重复投递（页面钩子解两遍 / 补发）只记一次。
+    // 必须挡在 guardEcho 赋值之前：重复报文若放进去，就等于把同一笔钱又挂了一条
+    // 「待核上舰」，回声兑账会跟着多算。上舰报文里有唯一 id，直接拿它当指纹。
+    var gid = (d.id != null) ? d.id : (d.trade_id != null ? d.trade_id : '');
+    var gts = (d.start_time != null) ? d.start_time : (d.timestamp != null ? d.timestamp : '');
+    // 唯一 id 优先；其次「报文里的时间戳 + 整份报文摘要」—— 两笔真人上舰各自带各自的时间，
+    // 只有线上字节完全一样的重复投递才会撞上；连时间戳都没有的报文，才退回纯摘要比对。
+    var guardKey = (gid !== '') ? String(gid)
+      : msgFingerprint('GUARD_BUY', [gts, JSON.stringify(d)]);
+    if (guardSeen(guardKey)) return;
     var price = hasPrice ? Number(d.price) : (GUARD_DEFAULT_PRICE[lv] || 0);
     // 报文里没有 price 时只能按档位默认价估，这种也要留样本，方便核对是不是估错了
     if (!hasPrice) {

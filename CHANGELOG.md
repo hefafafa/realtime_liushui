@@ -205,3 +205,44 @@
   9 个测试文件全过；注释合计从 25.5 KB / 535 行降到 16.3 KB / 359 行，脚本 123.6 KB → 113.9 KB。
 - **打赏/反馈通道原样保留**：页脚「反馈 / 提需求」「请作者喝杯奶茶（展开收款码）」「复制诊断信息」，
   以及首次提示里的"支持一下作者"，逻辑与文案未动。
+
+---
+
+## v2.8.26（2026-10-16）修「同一份报文重复计数」（面板成对出现重复行）
+
+用户报（附截图）：面板里同一个人两行成对出现 —— 一行正常金额，紧跟一行「×1（金额未识别）」。
+例子：`ennnnnnnnm00 拾星入怀 ×1（金额未识别）` 串在 `ennnnnnnnm00 拾星入怀 … ¥9.00` 下面。
+
+**根因**：不是"两条通道各记一次"（那是 crossDuplicate 管的，它对了），而是**同一条通道里
+同一份报文被投递了两遍**（页面钩子把同一份 JSON 解两遍 / 包重放 / 断线补发）。
+第二份在跨通道配对表里找不到对手，就被当成"自有通道漏了这笔"再走一遍，走到
+`combo_total_coin` 累计没涨的分支 → 金额算 0 → 落进 realtime_liushui.user.js:824-830 的
+"金额未识别"兜底行。crossTake 是**取走就删**，只挡得住两份，第三份照样漏。
+
+**修法**（realtime_liushui.user.js:622-656 新增登记表 + :845-864 接入 + :1046-1055 上舰）：
+
+- 新增报文级登记表 `giftSeenKeys` / `pageGiftSeenKeys` / `guardSeenIds`，
+  配 `seenOnce(list, key, now)`：**记过就不再记，且登记项不会被消费掉**
+  （这是和 crossTake 的关键区别）。窗口 `SAME_MSG_MS = 60000`，只是防内存膨胀的兜底，
+  列表超 1200 条从头部裁。
+- 礼物指纹分两档：
+  - `(batchId && cumCoin)` → `'b|' + batchId + '|' + cumCoin`。
+    **必须带 cumCoin**：同一批次里"累计 1 个"和"累计 2 个"是两条真消息，
+    只按 batchId 去重会把第 2 条连击吞掉。
+  - 否则 → `msgFingerprint(cmd, [gname, num, price, comboNum, uname, msgId, msgTs, rawPb])`，
+    带上**累计个数 comboNum**（连击续报靠它区分第 1 个和第 2 个）与 pb 原文。
+- **只在报文带身份标记时才去重**（`if (batchId || cumCoin || msgId || msgTs || rawPb)`）：
+  老式匿名礼物什么标记都没有，分不清"重复投递"和"同一个人又送了一个"，
+  宁可不合也不吞真钱。
+- 上舰 `GUARD_BUY`：`gid`（id / trade_id）优先，否则用
+  `msgFingerprint('GUARD_BUY', [gts, JSON.stringify(d)])` ——
+  时间戳 + 整份报文摘要，真人前后两笔上舰各自带各自时间，只有字节级重放才会撞上。
+- 改动只在**最早入口**拦截（`if (giftSeenOnce(...)) return;`），不动后面任何计费/展示逻辑，
+  所以金额、贡献榜、CSV 导出口径全不变。
+
+**验收**：10 个 node 测试全绿（test-cross-dedup / test-cut-rate / test-drag / test-gift-v2-items /
+test-guard-echo / test-guard-verify / test-links-diag / test-liushui / test-panel-layout /
+test-redpacket）。test-gift-v2-items.js 新增两条回归：
+场景 E 同一份真实 pb 连喂两遍 → 只记 1 条正常金额、0 条"金额未识别"；
+场景 F 同一批次累计 100→200 → 两笔都记（第 2 笔补差额）、第 2 份重放不再加钱。
+（定位期的 probe-dup*.js 临时探针已删，结论都固化进上面两个场景。）
