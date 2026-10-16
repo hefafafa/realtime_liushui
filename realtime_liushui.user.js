@@ -2,7 +2,7 @@
 // @name         realtime_liushui
 // @name:zh-CN   B站直播 · 本场流水看板
 // @namespace    realtime-liushui
-// @version      2.8.26
+// @version      2.8.27
 // @copyright    2026, local（MIT：随便用、随便改，出事不负责）
 // @description  仅用于 bilibili 直播间（live.bilibili.com）：实时统计本场流水 —— 付费礼物 / 超级留言(SC) / 大航海，并读取官方高能榜贡献值，含贡献榜、事件流、支持「抽成后流水」与 CSV 导出
 // @author       local
@@ -54,7 +54,7 @@
   var GUARD_NAME = { 1: '总督', 2: '提督', 3: '舰长' };
   var GUARD_DEFAULT_PRICE = { 1: 19998000, 2: 1998000, 3: 138000 };  // 电池
 
-  var SCRIPT_VERSION = '2.8.26';                     // 与头部 @version 一致；自检窗首行显示，方便用户报版本
+  var SCRIPT_VERSION = '2.8.27';                     // 与头部 @version 一致；自检窗首行显示，方便用户报版本
 
   // ---------------- 作者联系 / 打赏入口 ----------------
   // 留空即完全不显示：不产生死链，也不弹窗打扰。与头部 @supportURL / @homepageURL 保持一致。
@@ -2187,6 +2187,16 @@
         } else if (t.id === 'dsh-ls-donate' || t.id === 'dsh-ls-qrclose') {
           toggleQr();
         }
+      });
+    }
+    // 收款码浮层里的「收起」必须单独挂监听：浮层 #dsh-ls-qr 与页脚那行 #dsh-ls-links 是**兄弟节点**，
+    // 上面挂在 el.links 上的委托收不到它 —— 这就是「收起点了没反应」的原因。
+    // 挂在浮层容器上而不是挂在「收起」那个 div 上：浮层内容是每次展开时重写的 innerHTML，
+    // 挂容器才不会随着 innerHTML 一起被换掉。
+    if (el.qr) {
+      el.qr.addEventListener('click', function (e) {
+        var t = e.target;
+        if (t && t.id === 'dsh-ls-qrclose') toggleQr();
       });
     }
     // 首次使用提示：点「知道了」只记一次；点「支持一下作者」顺手展开收款码
