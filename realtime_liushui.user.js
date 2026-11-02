@@ -2,7 +2,7 @@
 // @name         realtime_liushui
 // @name:zh-CN   B站直播 · 本场流水看板
 // @namespace    realtime-liushui
-// @version      2.8.27
+// @version      2.8.28
 // @copyright    2026, local（MIT：随便用、随便改，出事不负责）
 // @description  仅用于 bilibili 直播间（live.bilibili.com）：实时统计本场流水 —— 付费礼物 / 超级留言(SC) / 大航海，并读取官方高能榜贡献值，含贡献榜、事件流、支持「抽成后流水」与 CSV 导出
 // @author       local
@@ -54,7 +54,7 @@
   var GUARD_NAME = { 1: '总督', 2: '提督', 3: '舰长' };
   var GUARD_DEFAULT_PRICE = { 1: 19998000, 2: 1998000, 3: 138000 };  // 电池
 
-  var SCRIPT_VERSION = '2.8.27';                     // 与头部 @version 一致；自检窗首行显示，方便用户报版本
+  var SCRIPT_VERSION = '2.8.28';                     // 与头部 @version 一致；自检窗首行显示，方便用户报版本
 
   // ---------------- 作者联系 / 打赏入口 ----------------
   // 留空即完全不显示：不产生死链，也不弹窗打扰。与头部 @supportURL / @homepageURL 保持一致。
@@ -99,7 +99,7 @@
     guardMsgs: 0,
     guardDedup: 0,    // 被判定为「大航海回声」而丢弃的重复礼物条数（诊断用）
     guardAdjusted: 0, // 其中有多少笔顺带按回声实付价把上舰金额压下来了（打折舰长）
-    guardPromo: 0,    // 其中有多少笔被判定为「赠送 / 活动舰长」而撤账（官方榜单不承认）
+    guardPromo: 0,    // 官方贡献增量不足、但**照样按实付计入**的上舰笔数（v2.8.28 起不再撤账）
     guardUnverified: 0, // 榜单里查无此人、因此**没有**撤账的上舰笔数（宁可多记，不能错删）
     guardPending: 0,  // 当前挂着「待核」的上舰笔数（诊断用）
     // ---- 人气红包：只登记，**不计入流水**（红包本身没有价值，只有内容物有价值）----
@@ -555,20 +555,26 @@
         pendingGuards.splice(i, 1);
         continue;
       }
-      // ② 人在榜单里、但贡献远低于这笔上舰 → 判定为赠送 / 活动，把这笔从上舰流水里撤掉。
-      // 谨慎到极点：只动这一笔，金额取事件行当前值（可能已被回声压过价）。
+      // ② 人在榜单里、但贡献增量远低于这笔上舰 —— **v2.8.28 起不再撤账**。
+      //    这条判据在真实直播间里会把真钱弄丢：花钱买了舰长但中途离场、或者官方还没把这笔
+      //    贡献结算上榜，都会出现「人在榜上、增量不够」。按「宁可多记，不能错删」，
+      //    现在只给事件行加标注、金额照原价计入，一分不少。
       var amount = p.amount || p.yuan;
       for (var j = S.events.length - 1; j >= 0; j--) {
         var ev = S.events[j];
         if (ev.kind === 'guard' && ev.who === p.who && Math.abs(ev.t - p.at) < 3000) { amount = ev.yuan; break; }
       }
-      takeBack('guard', p.key, amount,
-        function (e2) { return e2.kind === 'guard' && e2.who === p.who && Math.abs(e2.t - p.at) < 3000; },
-        function (e2) { e2.yuan = 0; e2.text = e2.text + '（未计入：官方无对应贡献）'; });
+      for (var jj = S.events.length - 1; jj >= 0; jj--) {
+        var evm = S.events[jj];
+        if (evm.kind === 'guard' && evm.who === p.who && Math.abs(evm.t - p.at) < 3000) {
+          evm.text = evm.text + '（官方贡献不足，仍按实付计入）';
+          break;
+        }
+      }
       S.guardPromo = (S.guardPromo || 0) + 1;
-      noteSusp('赠送/活动舰长已撤账', 'GUARD_BUY', p.who + ' ' + amount.toFixed(2) +
-        ' 元 · 官方贡献 ' + ((p.best || 0) / 10).toFixed(2) + ' 元（上舰前基准 ' + ((p.base || 0) / 10).toFixed(2) +
-        ' 元，本笔实付 ' + (p.amount || p.yuan).toFixed(2) + ' 元）');
+      noteSusp('官方贡献不足，仍按实付计入', 'GUARD_BUY', p.who + ' ' + amount.toFixed(2) +
+        ' 元 · 官方贡献增量 ' + ((((p.best || 0) - (p.base || 0)) / 10).toFixed(2)) +
+        ' 元（上舰前基准 ' + ((p.base || 0) / 10).toFixed(2) + ' 元，本笔实付 ' + amount.toFixed(2) + ' 元）');
       pendingGuards.splice(i, 1);
     }
     S.guardPending = pendingGuards.length;
@@ -2682,7 +2688,7 @@
       ((S.guardDedup || S.guardAdjusted || S.guardPromo || S.guardUnverified || S.guardPending) ?
         '<br><span style="color:#7fd1ff;">大航海核验: 回声去重 ' + (S.guardDedup || 0) + ' 条' +
         (S.guardAdjusted ? '（其中 ' + S.guardAdjusted + ' 笔按回声实付价压过价）' : '') +
-        (S.guardPromo ? '（' + S.guardPromo + ' 笔赠送/活动已撤账）' : '') +
+        (S.guardPromo ? '（<span style="color:#7fd1ff;">' + S.guardPromo + ' 笔贡献不足，已按实付计入</span>）' : '') +
         (S.guardUnverified ? '（<span style="color:#ffd166;">' + S.guardUnverified + ' 笔榜单查无此人、未撤账，请人工确认</span>）' : '') +
         (S.guardPending ? '（待核 ' + S.guardPending + ' 笔）' : '') +
         (S.echoSample ? '（最近: ' + esc(S.echoSample) + '）' : '') + '</span>' : '') +
